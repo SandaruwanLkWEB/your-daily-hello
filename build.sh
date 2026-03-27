@@ -4,15 +4,23 @@
 
 set -e
 
+export NPM_CONFIG_PRODUCTION=false
+export NODE_ENV=development
+
+echo "=== Installing Frontend Dependencies (with dev deps) ==="
+npm install --legacy-peer-deps --include=dev
+
 echo "=== Building Frontend ==="
 npm run build
 # Move frontend build to backend/frontend-dist
 rm -rf backend/frontend-dist
 mv dist backend/frontend-dist
 
-echo "=== Building Backend ==="
+echo "=== Installing Backend Dependencies (with dev deps) ==="
 cd backend
-npm install
+npm install --include=dev
+
+echo "=== Building Backend ==="
 npm run build
 
 echo "=== Build Complete ==="
