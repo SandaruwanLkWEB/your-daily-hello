@@ -29,6 +29,7 @@ export class AmazonLocationProvider implements RoutingProvider {
   private readonly region: string;
   private readonly apiKey: string;
   private readonly mapStyle: string;
+  private readonly authMode: string;
   private readonly routesEnabled: boolean;
   private readonly mapsEnabled: boolean;
   private readonly geoRoutesClient: GeoRoutesClient | null;
@@ -37,16 +38,30 @@ export class AmazonLocationProvider implements RoutingProvider {
     region?: string;
     apiKey?: string;
     mapStyle?: string;
+    authMode?: string;
     timeoutMs?: number;
     enableRoutes?: boolean;
     enableMaps?: boolean;
   }) {
-    this.region = config.region || process.env.AWS_REGION || 'ap-southeast-1';
+    this.region = config.region || process.env.AWS_REGION || '';
     this.apiKey = config.apiKey || process.env.AMAZON_LOCATION_API_KEY || '';
     this.mapStyle = config.mapStyle || 'Standard';
+    this.authMode = config.authMode || process.env.AMAZON_LOCATION_AUTH_MODE || 'api-key';
+
+    if (!this.region) {
+      this.logger.warn('AWS_REGION is not set — maps and routing will be unavailable');
+    }
 
     const apiKeyPresent = !!this.apiKey;
-    this.mapsEnabled = apiKeyPresent && (config.enableMaps ?? true);
+    this.mapsEnabled = apiKeyPresent && !!this.region && (config.enableMaps ?? true);
+
+    // Masked diagnostics for key rotation debugging (never log full key)
+    if (apiKeyPresent) {
+      const masked = this.apiKey.length > 8
+        ? `${this.apiKey.substring(0, 4)}...${this.apiKey.substring(this.apiKey.length - 4)} (${this.apiKey.length} chars)`
+        : `*** (${this.apiKey.length} chars)`;
+      this.logger.log(`Amazon Location API key: ${masked}, region: ${this.region || '(not set)'}, style: ${this.mapStyle}, authMode: ${this.authMode}`);
+    }
 
     const hasIamCreds = !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
     this.routesEnabled = hasIamCreds && (config.enableRoutes ?? true);
@@ -92,9 +107,14 @@ export class AmazonLocationProvider implements RoutingProvider {
   }
 
   getMapStyleUrl(): string {
-    if (!this.mapsEnabled) return '';
+    if (!this.mapsEnabled || !this.region || !this.apiKey) return '';
     return `https://maps.geo.${this.region}.amazonaws.com/v2/styles/${encodeURIComponent(this.mapStyle)}/descriptor?key=${encodeURIComponent(this.apiKey)}`;
   }
+
+  getRegion(): string { return this.region; }
+  hasApiKey(): boolean { return !!this.apiKey; }
+  getMapStyle(): string { return this.mapStyle; }
+  getAuthMode(): string { return this.authMode; }
 
   // ═══════════════════════════════════════════
   // CalculateRoutes — chunked for >23 intermediate waypoints

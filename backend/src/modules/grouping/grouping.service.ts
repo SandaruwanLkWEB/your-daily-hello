@@ -353,10 +353,21 @@ export class GroupingService {
     const allEmps = allEmpIds.length > 0 ? await this.empRepo.findByIds(allEmpIds) : [];
     const empMap = new Map(allEmps.map(e => [e.id, e]));
 
-    // Batch-load ALL vehicles referenced by groups
-    const vehicleIds = [...new Set(groups.map(g => g.assigned_vehicle_id).filter(Boolean))] as number[];
-    const allVehicles = vehicleIds.length > 0 ? await this.vehicleRepo.findByIds(vehicleIds) : [];
+    // Batch-load ALL vehicles (assigned + all active for capacity truth)
+    const assignedVehicleIds = [...new Set(groups.map(g => g.assigned_vehicle_id).filter(Boolean))] as number[];
+    const allVehicles = assignedVehicleIds.length > 0 ? await this.vehicleRepo.findByIds(assignedVehicleIds) : [];
     const vehicleMap = new Map(allVehicles.map(v => [v.id, v]));
+
+    // Load all active vehicles for capacity truth computation
+    const activeVehicles = await this.vehicleRepo.find({ where: { is_active: true } });
+    const maxDriverBackedEffCap = Math.max(
+      ...activeVehicles.filter(v => !!v.driver_name).map(v => GroupingService.getEffectiveCapacity(v)),
+      0,
+    );
+    const maxAnyEffCap = Math.max(
+      ...activeVehicles.map(v => GroupingService.getEffectiveCapacity(v)),
+      0,
+    );
 
     // Group members by group_id for fast lookup
     const membersByGroup = new Map<number, typeof allMembers>();
@@ -376,6 +387,20 @@ export class GroupingService {
         emp_no: empMap.get(m.employee_id)?.emp_no || '',
       }));
 
+      // Capacity truth fields — single source of truth from backend
+      const empCount = g.employee_count;
+      const fitsSingleVehicle = empCount <= maxAnyEffCap;
+      const fitsSingleDriverBackedVehicle = empCount <= maxDriverBackedEffCap;
+      const requiresSplit = !fitsSingleDriverBackedVehicle;
+
+      // Determine assignment block reason
+      let assignmentBlockReason: string | undefined;
+      if (!fitsSingleVehicle) {
+        assignmentBlockReason = undefined; // genuinely needs split
+      } else if (fitsSingleVehicle && !fitsSingleDriverBackedVehicle) {
+        assignmentBlockReason = 'no_driver_backed_vehicle';
+      }
+
       return {
         ...g,
         members: membersWithNames,
@@ -388,6 +413,11 @@ export class GroupingService {
         routing_source: g.routing_source,
         corridor_label: g.corridor_label,
         corridor_code: g.corridor_code,
+        // Capacity truth — frontend MUST use these instead of guessing
+        fits_single_vehicle: fitsSingleVehicle,
+        fits_single_vehicle_with_overflow: fitsSingleVehicle,
+        requires_split: requiresSplit,
+        assignment_block_reason: assignmentBlockReason,
       };
     });
 
@@ -651,33 +681,39 @@ export class GroupingService {
     employeeCount: number,
     vehicles: Vehicle[],
   ): { vehicleId: number | undefined; overflowNeeded: boolean; overflowCount: number; reason: string } {
-    // Sort candidates: prefer exact fit (no overflow), then smallest overflow
-    const candidates = vehicles
-      .filter(v => v.is_active !== false)
-      .map(v => {
-        const effCap = GroupingService.getEffectiveCapacity(v);
-        const overflow = Math.max(0, employeeCount - v.capacity);
-        return { vehicle: v, effCap, overflow, fits: employeeCount <= effCap, fitsBase: employeeCount <= v.capacity };
-      })
-      .filter(c => c.fits)
-      .sort((a, b) => {
-        // Prefer no overflow, then smallest overflow
-        if (a.fitsBase !== b.fitsBase) return a.fitsBase ? -1 : 1;
-        return a.overflow - b.overflow;
-      });
+    // Prefer driver-backed vehicles first, then any active vehicle
+    const allActive = vehicles.filter(v => v.is_active !== false);
+    const driverBacked = allActive.filter(v => !!v.driver_name);
+    const pools = [driverBacked, allActive]; // try driver-backed first
 
-    if (candidates.length > 0) {
-      const best = candidates[0];
-      const v = best.vehicle;
-      if (best.fitsBase) {
-        return { vehicleId: v.id, overflowNeeded: false, overflowCount: 0, reason: `${v.type} ${v.registration_no} fits ${employeeCount} employees (capacity ${v.capacity})` };
+    for (const pool of pools) {
+      const candidates = pool
+        .map(v => {
+          const effCap = GroupingService.getEffectiveCapacity(v);
+          const overflow = Math.max(0, employeeCount - v.capacity);
+          return { vehicle: v, effCap, overflow, fits: employeeCount <= effCap, fitsBase: employeeCount <= v.capacity };
+        })
+        .filter(c => c.fits)
+        .sort((a, b) => {
+          if (a.fitsBase !== b.fitsBase) return a.fitsBase ? -1 : 1;
+          return a.overflow - b.overflow;
+        });
+
+      if (candidates.length > 0) {
+        const best = candidates[0];
+        const v = best.vehicle;
+        const hasDriver = !!v.driver_name;
+        const driverNote = hasDriver ? '' : ' (no permanent driver — assign one first)';
+        if (best.fitsBase) {
+          return { vehicleId: v.id, overflowNeeded: false, overflowCount: 0, reason: `${v.type} ${v.registration_no} fits ${employeeCount} employees (capacity ${v.capacity})${driverNote}` };
+        }
+        return {
+          vehicleId: v.id,
+          overflowNeeded: true,
+          overflowCount: best.overflow,
+          reason: `${v.type} ${v.registration_no} fits ${employeeCount} with ${best.overflow} overflow (capacity ${v.capacity} + ${GroupingService.getOverflowAllowance(v)} overflow)${driverNote}`,
+        };
       }
-      return {
-        vehicleId: v.id,
-        overflowNeeded: true,
-        overflowCount: best.overflow,
-        reason: `${v.type} ${v.registration_no} fits ${employeeCount} with ${best.overflow} overflow (capacity ${v.capacity} + ${GroupingService.getOverflowAllowance(v)} overflow)`,
-      };
     }
 
     return { vehicleId: undefined, overflowNeeded: false, overflowCount: 0, reason: `No single vehicle for ${employeeCount} employees — use split-assign to allocate multiple vehicles` };

@@ -35,13 +35,28 @@ export class DailyLockService {
       where: { request_date: date as any, status: RequestStatus.ADMIN_APPROVED },
     });
 
+    // Compute live employee total from approved/locked requests if lock snapshot is 0
+    let totalEmployeeCount = lock?.total_employee_count ?? 0;
+    if (totalEmployeeCount === 0) {
+      const relevantRequests = await this.reqRepo.find({
+        where: { request_date: date as any, status: In([RequestStatus.ADMIN_APPROVED, RequestStatus.DAILY_LOCKED, RequestStatus.TA_PROCESSING, RequestStatus.GROUPING_COMPLETED, RequestStatus.TA_COMPLETED, RequestStatus.HR_APPROVED]) },
+        select: ['id'],
+      });
+      if (relevantRequests.length > 0) {
+        for (const req of relevantRequests) {
+          const count = await this.reqEmpRepo.count({ where: { request_id: req.id } });
+          totalEmployeeCount += count;
+        }
+      }
+    }
+
     return {
       date,
       isLocked: lock?.is_locked ?? false,
       lockedAt: lock?.locked_at,
       lockedByUserId: lock?.locked_by_user_id,
       lockedRequestCount: lock?.locked_request_count ?? 0,
-      totalEmployeeCount: lock?.total_employee_count ?? 0,
+      totalEmployeeCount,
       approvedRequestCount: approvedCount,
       dailyRunId: dailyRun?.id,
       dailyRunStatus: dailyRun?.status,

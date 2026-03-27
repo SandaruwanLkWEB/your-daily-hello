@@ -62,6 +62,11 @@ interface GroupData {
   routing_source?: string;
   route_geometry?: number[][];
   members?: any[];
+  // Backend capacity truth fields
+  fits_single_vehicle?: boolean;
+  fits_single_vehicle_with_overflow?: boolean;
+  requires_split?: boolean;
+  assignment_block_reason?: string;
 }
 
 interface RunData {
@@ -211,15 +216,27 @@ export default function TaAssignmentBoardPage() {
   const totalDurationMin = Math.round(groups.reduce((s, g) => s + (Number(g.estimated_duration_seconds) || 0), 0) / 60);
   const isAmazon = run?.routing_source === 'AMAZON_ROUTE';
 
-  // Determine if a group REQUIRES split (exceeds capacity of any single available vehicle)
+  // Determine if a group REQUIRES split — prefer backend truth, fallback to local check
   const groupNeedsSplit = (g: GroupData): boolean => {
     if (g.assigned_vehicle_id) return false;
     if (g.status === 'CONFIRMED') return false;
+    // Use backend truth if available
+    if (g.requires_split != null) return g.requires_split;
+    // Fallback: local check
     const maxEffCap = Math.max(
       ...vehicles.filter(v => v.is_active !== false && v.driver_name).map(v => getEffectiveCapacity(v)),
       0,
     );
     return g.employee_count > maxEffCap;
+  };
+
+  // Is the issue a driver/availability problem, not a capacity problem?
+  const groupHasDriverProblem = (g: GroupData): boolean => {
+    if (g.assigned_vehicle_id) return false;
+    if (g.assignment_block_reason === 'no_driver_backed_vehicle') return true;
+    // Local fallback: fits any vehicle but no driver-backed vehicle
+    if (g.fits_single_vehicle === true && g.requires_split === true) return true;
+    return false;
   };
 
   // Can a group be optionally split? (unconfirmed, 2+ members, not already requiring split)
@@ -344,6 +361,17 @@ export default function TaAssignmentBoardPage() {
           )}
 
           <div className="space-y-3">
+            {groups.length === 0 && (
+              <Card>
+                <CardContent className="py-12 text-center space-y-2">
+                  <div className="mx-auto w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                    <Route className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <p className="font-medium text-foreground text-sm">No groups in this run</p>
+                  <p className="text-xs text-muted-foreground">The grouping run completed but produced no groups. Check if approved requests exist for this date.</p>
+                </CardContent>
+              </Card>
+            )}
             {groups.map(g => {
               const driver = getDriver(g);
               const isReady = !!g.assigned_vehicle_id && !!driver;
@@ -374,14 +402,19 @@ export default function TaAssignmentBoardPage() {
                             {durMin} min
                           </Badge>
                         )}
-                        {(g.overflow_count ?? 0) > 0 && (
-                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                            +{g.overflow_count} overflow
+                        {(g.overflow_count ?? 0) > 0 && !needsSplit && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            +{g.overflow_count} overflow (allowed)
                           </Badge>
                         )}
-                        {needsSplit && (
+                        {needsSplit && !groupHasDriverProblem(g) && (
                           <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
                             Split Required
+                          </Badge>
+                        )}
+                        {groupHasDriverProblem(g) && (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                            No Driver-Backed Vehicle
                           </Badge>
                         )}
                         {g.routing_source && (
@@ -440,7 +473,7 @@ export default function TaAssignmentBoardPage() {
                       )}
 
                       {/* Split required: show split UI */}
-                      {needsSplit && !isSplitMode && (
+                      {needsSplit && !groupHasDriverProblem(g) && !isSplitMode && (
                         <div className="rounded-md border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning))]/5 p-3 space-y-2">
                           <p className="text-xs text-[hsl(var(--warning))] font-medium flex items-center gap-1.5">
                             <Scissors className="h-3.5 w-3.5" />
@@ -454,6 +487,18 @@ export default function TaAssignmentBoardPage() {
                           >
                             <Scissors className="h-3 w-3" /> Split & Assign Multiple Vehicles
                           </Button>
+                        </div>
+                      )}
+                      {/* Driver availability problem */}
+                      {groupHasDriverProblem(g) && !isSplitMode && (
+                        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-1">
+                          <p className="text-xs text-destructive font-medium flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            This group fits a vehicle's capacity, but no active vehicle has a permanent driver assigned.
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Assign a permanent driver to a vehicle in Vehicle Management, then return here to assign.
+                          </p>
                         </div>
                       )}
 

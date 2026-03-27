@@ -21,6 +21,14 @@ const SEV_COLORS: Record<ExceptionRow['severity'], string> = {
 interface Props { data: ExceptionRow[]; meta: ReportMeta }
 
 export default function ExceptionReportView({ data, meta }: Props) {
+  if (!data || data.length === 0) {
+    return (
+      <PrintableReportLayout meta={{ ...meta, title: 'Exception Report' }}>
+        <p className="py-8 text-center text-sm text-muted-foreground">No exceptions found for the selected date. All clear!</p>
+      </PrintableReportLayout>
+    );
+  }
+
   const highCount = data.filter(e => e.severity === 'high').length;
 
   return (
@@ -43,12 +51,12 @@ export default function ExceptionReportView({ data, meta }: Props) {
         </TableHeader>
         <TableBody>
           {data.map((e, i) => {
-            const t = TYPE_LABELS[e.type];
+            const t = TYPE_LABELS[e.type] || { label: e.type, icon: AlertCircle };
             return (
               <TableRow key={i}>
                 <TableCell className="text-xs">
-                  <Badge variant="outline" className={`text-[10px] ${SEV_COLORS[e.severity]}`}>
-                    {e.severity.toUpperCase()}
+                  <Badge variant="outline" className={`text-[10px] ${SEV_COLORS[e.severity] || ''}`}>
+                    {e.severity?.toUpperCase() || 'N/A'}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs">
@@ -58,7 +66,7 @@ export default function ExceptionReportView({ data, meta }: Props) {
                   </div>
                 </TableCell>
                 <TableCell className="text-xs">{e.description}</TableCell>
-                <TableCell className="text-xs font-mono">{e.groupCode || e.employeeName || '—'}</TableCell>
+                <TableCell className="text-xs font-mono">{e.groupCode || (e.employeeNo ? `${e.employeeNo} – ${e.employeeName}` : e.employeeName) || '—'}</TableCell>
                 <TableCell className="text-xs font-mono">{e.requestCode}</TableCell>
               </TableRow>
             );

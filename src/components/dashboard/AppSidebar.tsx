@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, FileText, Users, Truck, MapPin, Route, BarChart3,
+  LayoutDashboard, FileText, Users, Truck, MapPin, BarChart3,
   Shield, Bell, Settings, HelpCircle, UserCog, Calendar, ClipboardList, CheckSquare, Cog,
   FileBarChart, Bus, FileSpreadsheet, Download, ScrollText, ShieldCheck, Info, Lock,
 } from 'lucide-react';
@@ -40,7 +40,6 @@ function getNavSections(role: Role): NavSection[] {
     { titleKey: 'sidebar.employees', url: '/employees', icon: Users },
     { titleKey: 'sidebar.departments', url: '/departments', icon: ClipboardList },
     { titleKey: 'sidebar.vehicles', url: '/vehicles', icon: Truck },
-    { titleKey: 'sidebar.routes', url: '/routes', icon: Route },
     { titleKey: 'sidebar.places', url: '/places', icon: MapPin },
   ];
 
@@ -80,7 +79,6 @@ function getNavSections(role: Role): NavSection[] {
     { titleKey: 'sidebar.allRequests', url: '/requests', icon: FileText },
     { titleKey: 'sidebar.reports', url: '/reports', icon: FileBarChart },
     { titleKey: 'sidebar.vehicles', url: '/vehicles', icon: Truck },
-    { titleKey: 'sidebar.routes', url: '/routes', icon: Route },
     { titleKey: 'sidebar.places', url: '/places', icon: MapPin },
   ];
 

@@ -18,11 +18,61 @@ export class LocationController {
   getMapConfig() {
     const avail = this.routing.getAvailability();
     const styleUrl = this.routing.getMapStyleUrl();
+    const region = this.routing.getRegion();
+    const hasApiKey = this.routing.hasApiKey();
+    const mapStyle = this.routing.getMapStyle();
+    const authMode = this.routing.getAuthMode();
+    const styleUrlRegionMatch = styleUrl.match(/maps\.geo\.([a-z0-9-]+)\.amazonaws\.com/);
+    const styleUrlRegion = styleUrlRegionMatch?.[1] || null;
+    const regionMismatch = !!region && !!styleUrlRegion && region !== styleUrlRegion;
+
+    let configStatus: 'OK' | 'MISSING_KEY' | 'MISSING_REGION' | 'MAPS_DISABLED' | 'INVALID_CONFIG' | 'REGION_MISMATCH' = 'OK';
+    let mapEnabled = avail.maps && !!styleUrl;
+    let mapErrorCode: string | null = null;
+    let mapErrorMessage: string | null = null;
+
+    if (!region) {
+      configStatus = 'MISSING_REGION';
+      mapEnabled = false;
+      mapErrorCode = 'REGION_MISSING';
+      mapErrorMessage = 'AWS_REGION environment variable is not set. Cannot generate map style URL.';
+    } else if (!hasApiKey) {
+      configStatus = 'MISSING_KEY';
+      mapEnabled = false;
+      mapErrorCode = 'API_KEY_MISSING';
+      mapErrorMessage = 'AMAZON_LOCATION_API_KEY environment variable is not set. Maps require an API key.';
+    } else if (!avail.maps) {
+      configStatus = 'MAPS_DISABLED';
+      mapEnabled = false;
+      mapErrorCode = 'MAPS_DISABLED';
+      mapErrorMessage = 'Amazon Maps are disabled via configuration (AMAZON_LOCATION_ENABLE_MAPS).';
+    } else if (!styleUrl) {
+      configStatus = 'INVALID_CONFIG';
+      mapEnabled = false;
+      mapErrorCode = 'STYLE_URL_EMPTY';
+      mapErrorMessage = 'Map style URL could not be generated. Check region and map style configuration.';
+    } else if (regionMismatch) {
+      configStatus = 'REGION_MISMATCH';
+      mapEnabled = false;
+      mapErrorCode = 'STYLE_URL_REGION_MISMATCH';
+      mapErrorMessage = `Map style URL region (${styleUrlRegion}) does not match AWS_REGION (${region}).`;
+    }
+
     return {
       provider: avail.provider,
-      region: avail.region || 'unknown',
-      mapStyleUrl: styleUrl,
-      mapStyleUrlPresent: !!styleUrl,
+      region: region || null,
+      styleName: mapStyle || null,
+      authMode,
+      hasApiKey,
+      // apiKey intentionally NOT exposed — frontend extracts key from mapStyleUrl
+      configStatus,
+      mapEnabled,
+      mapStyleUrl: styleUrl || null,
+      styleUrlType: 'string',
+      styleUrlRegion,
+      regionMismatch,
+      mapErrorCode,
+      mapErrorMessage,
       routesAvailable: avail.routes,
       mapsAvailable: avail.maps,
       matrixAvailable: avail.matrix,

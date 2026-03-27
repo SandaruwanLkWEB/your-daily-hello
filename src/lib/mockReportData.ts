@@ -18,20 +18,20 @@ export const DEMO_META: ReportMeta = {
 };
 
 export const DEMO_ROUTE_WISE: RouteWiseRow[] = [
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Galle Corridor – South', groupCode: 'GRP-A1', employeeName: 'Kamal Perera', destination: 'Galle Fort Junction', vehicleReg: 'WP-KA-1234', driverName: 'Nimal Silva', driverPhone: '071-2345678', status: 'Assigned' },
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Galle Corridor – South', groupCode: 'GRP-A1', employeeName: 'Saman Jayawardena', destination: 'Hikkaduwa Town', vehicleReg: 'WP-KA-1234', driverName: 'Nimal Silva', driverPhone: '071-2345678', status: 'Assigned' },
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Galle Corridor – South', groupCode: 'GRP-A1', employeeName: 'Dilini Fernando', destination: 'Ambalangoda', vehicleReg: 'WP-KA-1234', driverName: 'Nimal Silva', driverPhone: '071-2345678', status: 'Assigned' },
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Matara Express', groupCode: 'GRP-B2', employeeName: 'Ruwan de Silva', destination: 'Matara Central', vehicleReg: 'WP-CB-5678', driverName: 'Sunil Bandara', driverPhone: '077-9876543', status: 'Assigned' },
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Matara Express', groupCode: 'GRP-B2', employeeName: 'Chamari Wickramasinghe', destination: 'Weligama', vehicleReg: 'WP-CB-5678', driverName: 'Sunil Bandara', driverPhone: '077-9876543', status: 'Assigned' },
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Colombo Metro', groupCode: 'GRP-C3', employeeName: 'Tharanga Rajapaksa', destination: 'Nugegoda', vehicleReg: 'WP-JA-9012', driverName: 'Ajith Kumara', driverPhone: '076-5551234', status: 'Assigned' },
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Colombo Metro', groupCode: 'GRP-C3', employeeName: 'Nadeesha Kumari', destination: 'Maharagama', vehicleReg: 'WP-JA-9012', driverName: 'Ajith Kumara', driverPhone: '076-5551234', status: 'Assigned' },
-  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'Colombo Metro', groupCode: 'GRP-C3', employeeName: 'Priyantha Bandara', destination: 'Kottawa', vehicleReg: 'WP-JA-9012', driverName: 'Ajith Kumara', driverPhone: '076-5551234', status: 'Assigned' },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Galle', groupCode: 'GRP-A1', employeeNo: 'EMP-1001', employeeName: 'Kamal Perera', destination: 'Galle Fort Junction', vehicleReg: 'WP-KA-1234', driverName: 'Nimal Silva', driverPhone: '071-2345678', status: 'Assigned', stopSequence: 3, stops: ['Ambalangoda', 'Hikkaduwa Town', 'Galle Fort Junction'] },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Galle', groupCode: 'GRP-A1', employeeNo: 'EMP-1002', employeeName: 'Saman Jayawardena', destination: 'Hikkaduwa Town', vehicleReg: 'WP-KA-1234', driverName: 'Nimal Silva', driverPhone: '071-2345678', status: 'Assigned', stopSequence: 2, stops: ['Ambalangoda', 'Hikkaduwa Town', 'Galle Fort Junction'] },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Galle', groupCode: 'GRP-A1', employeeNo: 'EMP-1003', employeeName: 'Dilini Fernando', destination: 'Ambalangoda', vehicleReg: 'WP-KA-1234', driverName: 'Nimal Silva', driverPhone: '071-2345678', status: 'Assigned', stopSequence: 1, stops: ['Ambalangoda', 'Hikkaduwa Town', 'Galle Fort Junction'] },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Matara', groupCode: 'GRP-B2', employeeNo: 'EMP-1004', employeeName: 'Ruwan de Silva', destination: 'Matara Central', vehicleReg: 'WP-CB-5678', driverName: 'Sunil Bandara', driverPhone: '077-9876543', status: 'Assigned', stopSequence: 2, stops: ['Weligama', 'Matara Central'] },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Matara', groupCode: 'GRP-B2', employeeNo: 'EMP-1005', employeeName: 'Chamari Wickramasinghe', destination: 'Weligama', vehicleReg: 'WP-CB-5678', driverName: 'Sunil Bandara', driverPhone: '077-9876543', status: 'Assigned', stopSequence: 1, stops: ['Weligama', 'Matara Central'] },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Kottawa', groupCode: 'GRP-C3', employeeNo: 'EMP-1006', employeeName: 'Tharanga Rajapaksa', destination: 'Nugegoda', vehicleReg: 'WP-JA-9012', driverName: 'Ajith Kumara', driverPhone: '076-5551234', status: 'Assigned', stopSequence: 1, stops: ['Nugegoda', 'Maharagama', 'Kottawa'] },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Kottawa', groupCode: 'GRP-C3', employeeNo: 'EMP-1007', employeeName: 'Nadeesha Kumari', destination: 'Maharagama', vehicleReg: 'WP-JA-9012', driverName: 'Ajith Kumara', driverPhone: '076-5551234', status: 'Assigned', stopSequence: 2, stops: ['Nugegoda', 'Maharagama', 'Kottawa'] },
+  { requestCode: 'REQ-2026-0042', requestDate: today, routeName: 'DSI to Kottawa', groupCode: 'GRP-C3', employeeNo: 'EMP-1008', employeeName: 'Priyantha Bandara', destination: 'Kottawa', vehicleReg: 'WP-JA-9012', driverName: 'Ajith Kumara', driverPhone: '076-5551234', status: 'Assigned', stopSequence: 3, stops: ['Nugegoda', 'Maharagama', 'Kottawa'] },
 ];
 
 export const DEMO_VEHICLE_WISE: VehicleWiseRow[] = [
-  { vehicleReg: 'WP-KA-1234', vehicleType: 'VAN', driverName: 'Nimal Silva', driverPhone: '071-2345678', groupCodes: ['GRP-A1'], employees: ['Kamal Perera', 'Saman Jayawardena', 'Dilini Fernando'], capacity: 15, occupancy: 3, overflow: false },
-  { vehicleReg: 'WP-CB-5678', vehicleType: 'BUS', driverName: 'Sunil Bandara', driverPhone: '077-9876543', groupCodes: ['GRP-B2'], employees: ['Ruwan de Silva', 'Chamari Wickramasinghe'], capacity: 52, occupancy: 2, overflow: false },
-  { vehicleReg: 'WP-JA-9012', vehicleType: 'VAN', driverName: 'Ajith Kumara', driverPhone: '076-5551234', groupCodes: ['GRP-C3'], employees: ['Tharanga Rajapaksa', 'Nadeesha Kumari', 'Priyantha Bandara'], capacity: 15, occupancy: 3, overflow: false },
+  { vehicleReg: 'WP-KA-1234', vehicleType: 'VAN', driverName: 'Nimal Silva', driverPhone: '071-2345678', groupCodes: ['GRP-A1'], employees: [{ empNo: 'EMP-1001', name: 'Kamal Perera' }, { empNo: 'EMP-1002', name: 'Saman Jayawardena' }, { empNo: 'EMP-1003', name: 'Dilini Fernando' }], capacity: 15, occupancy: 3, overflow: false },
+  { vehicleReg: 'WP-CB-5678', vehicleType: 'BUS', driverName: 'Sunil Bandara', driverPhone: '077-9876543', groupCodes: ['GRP-B2'], employees: [{ empNo: 'EMP-1004', name: 'Ruwan de Silva' }, { empNo: 'EMP-1005', name: 'Chamari Wickramasinghe' }], capacity: 52, occupancy: 2, overflow: false },
+  { vehicleReg: 'WP-JA-9012', vehicleType: 'VAN', driverName: 'Ajith Kumara', driverPhone: '076-5551234', groupCodes: ['GRP-C3'], employees: [{ empNo: 'EMP-1006', name: 'Tharanga Rajapaksa' }, { empNo: 'EMP-1007', name: 'Nadeesha Kumari' }, { empNo: 'EMP-1008', name: 'Priyantha Bandara' }], capacity: 15, occupancy: 3, overflow: false },
 ];
 
 export const DEMO_DEPT_SUMMARY: DepartmentSummaryRow[] = [
@@ -50,24 +50,24 @@ export const DEMO_DISPATCH_MANIFEST: DispatchManifestRow[] = [
   {
     requestDate: today, groupCode: 'GRP-A1', vehicleReg: 'WP-KA-1234', driverName: 'Nimal Silva', driverPhone: '071-2345678', notes: 'Depart depot at 18:30',
     employees: [
-      { name: 'Kamal Perera', destination: 'Galle Fort Junction', sequence: 1 },
-      { name: 'Saman Jayawardena', destination: 'Hikkaduwa Town', sequence: 2 },
-      { name: 'Dilini Fernando', destination: 'Ambalangoda', sequence: 3 },
+      { empNo: 'EMP-1001', name: 'Kamal Perera', destination: 'Galle Fort Junction', sequence: 1 },
+      { empNo: 'EMP-1002', name: 'Saman Jayawardena', destination: 'Hikkaduwa Town', sequence: 2 },
+      { empNo: 'EMP-1003', name: 'Dilini Fernando', destination: 'Ambalangoda', sequence: 3 },
     ],
   },
   {
     requestDate: today, groupCode: 'GRP-B2', vehicleReg: 'WP-CB-5678', driverName: 'Sunil Bandara', driverPhone: '077-9876543', notes: 'Depart depot at 18:30',
     employees: [
-      { name: 'Ruwan de Silva', destination: 'Matara Central', sequence: 1 },
-      { name: 'Chamari Wickramasinghe', destination: 'Weligama', sequence: 2 },
+      { empNo: 'EMP-1004', name: 'Ruwan de Silva', destination: 'Matara Central', sequence: 1 },
+      { empNo: 'EMP-1005', name: 'Chamari Wickramasinghe', destination: 'Weligama', sequence: 2 },
     ],
   },
   {
     requestDate: today, groupCode: 'GRP-C3', vehicleReg: 'WP-JA-9012', driverName: 'Ajith Kumara', driverPhone: '076-5551234', notes: 'Depart depot at 18:45',
     employees: [
-      { name: 'Tharanga Rajapaksa', destination: 'Nugegoda', sequence: 1 },
-      { name: 'Nadeesha Kumari', destination: 'Maharagama', sequence: 2 },
-      { name: 'Priyantha Bandara', destination: 'Kottawa', sequence: 3 },
+      { empNo: 'EMP-1006', name: 'Tharanga Rajapaksa', destination: 'Nugegoda', sequence: 1 },
+      { empNo: 'EMP-1007', name: 'Nadeesha Kumari', destination: 'Maharagama', sequence: 2 },
+      { empNo: 'EMP-1008', name: 'Priyantha Bandara', destination: 'Kottawa', sequence: 3 },
     ],
   },
 ];
@@ -79,7 +79,7 @@ export const DEMO_COST_SUMMARY: CostSummaryRow[] = [
 ];
 
 export const DEMO_EXCEPTIONS: ExceptionRow[] = [
-  { type: 'unresolved-location', description: 'Employee has no resolved drop-off destination', employeeName: 'Aruni Dissanayake', severity: 'high', requestCode: 'REQ-2026-0044' },
+  { type: 'unresolved-location', description: 'Employee has no resolved drop-off destination', employeeNo: 'EMP-1009', employeeName: 'Aruni Dissanayake', severity: 'high', requestCode: 'REQ-2026-0044' },
   { type: 'overflow', description: 'VAN capacity exceeded by 2 passengers', groupCode: 'GRP-D4', severity: 'medium', requestCode: 'REQ-2026-0045' },
   { type: 'unassigned', description: 'Group has no vehicle assigned', groupCode: 'GRP-E5', severity: 'high', requestCode: 'REQ-2026-0044' },
   { type: 'warning', description: 'Driver license expires in 7 days', severity: 'low', requestCode: 'REQ-2026-0042' },

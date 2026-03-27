@@ -24,6 +24,7 @@ export class RoutingService {
       region: config.get('amazonLocation.region'),
       apiKey: config.get('amazonLocation.apiKey'),
       mapStyle: config.get('amazonLocation.mapStyle'),
+      authMode: config.get('amazonLocation.authMode', 'api-key'),
       timeoutMs: config.get('amazonLocation.timeoutMs', 10000),
       enableRoutes: config.get('amazonLocation.enableRoutes', true),
       enableMaps: config.get('amazonLocation.enableMaps', true),
@@ -46,6 +47,10 @@ export class RoutingService {
   getAvailability(): RoutingAvailability { return this.provider.getAvailability(); }
   getMapStyleUrl(): string { return this.provider.getMapStyleUrl(); }
   getProviderLabel(): string { return this.provider.getProviderLabel(); }
+  getRegion(): string { return (this.provider as AmazonLocationProvider).getRegion?.() || ''; }
+  hasApiKey(): boolean { return (this.provider as AmazonLocationProvider).hasApiKey?.() || false; }
+  getMapStyle(): string { return (this.provider as AmazonLocationProvider).getMapStyle?.() || ''; }
+  getAuthMode(): string { return (this.provider as AmazonLocationProvider).getAuthMode?.() || 'api-key'; }
 
   /** Calculate route between waypoints */
   async calculateRoute(waypoints: LatLng[]): Promise<RouteResult | null> {

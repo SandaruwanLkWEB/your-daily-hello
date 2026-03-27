@@ -37,7 +37,7 @@ export default function RequestSummaryCard({ request, onClick, compact }: Props)
               </span>
               <span className="flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" />
-                {request.employee_count ?? request.employees?.length ?? 0} employees
+                {request.employee_count ?? request.employees?.length ?? '—'} employees
               </span>
               {request.ot_time && (
                 <span className="flex items-center gap-1">

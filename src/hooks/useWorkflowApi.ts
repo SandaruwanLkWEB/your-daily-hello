@@ -48,7 +48,7 @@ export function useWorkflowApi() {
   const fetchRequests = useCallback(
     async (filters?: { status?: RequestStatus; departmentId?: number }) => {
       return wrap(async () => {
-        const params: Record<string, any> = { page: 1, limit: 200 };
+        const params: Record<string, any> = { page: 1, limit: 1000 };
         if (filters?.status) params.status = filters.status;
         if (filters?.departmentId) params.departmentId = filters.departmentId;
         const res = await api.get('/transport-requests', { params });
@@ -289,11 +289,30 @@ export function useWorkflowApi() {
   const fetchDeptEmployees = useCallback(
     async (deptId?: number) => {
       return wrap(async () => {
-        const params: Record<string, any> = { limit: 200 };
+        // Fetch first page to get total, then fetch all if needed
+        const params: Record<string, any> = { limit: 1000 };
         if (deptId) params.departmentId = deptId;
         const res = await api.get('/employees', { params });
         const data = extractData<any>(res);
-        return (data?.items || []) as WorkflowEmployee[];
+        const items = data?.items || [];
+        const total = data?.total || items.length;
+
+        // If there are more employees, fetch remaining pages
+        if (total > items.length) {
+          const remaining = total - items.length;
+          const pages = Math.ceil(remaining / 1000);
+          const promises = [];
+          for (let p = 2; p <= pages + 1; p++) {
+            promises.push(api.get('/employees', { params: { ...params, page: p } }));
+          }
+          const results = await Promise.all(promises);
+          for (const r of results) {
+            const d = extractData<any>(r);
+            items.push(...(d?.items || []));
+          }
+        }
+
+        return items as WorkflowEmployee[];
       });
     },
     [wrap],

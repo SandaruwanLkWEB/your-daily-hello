@@ -17,7 +17,7 @@ export default function ReportFiltersBar({ filters, onChange, onReset }: Props) 
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <div>
-          <Label className="text-xs text-muted-foreground">Date</Label>
+          <Label className="text-xs text-muted-foreground">Report Date</Label>
           <Input type="date" value={filters.date || ''} onChange={e => update({ date: e.target.value })} className="mt-1" />
         </div>
         <div className="flex items-end">

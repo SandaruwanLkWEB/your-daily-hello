@@ -65,7 +65,7 @@ export default () => ({
   },
 
   amazonLocation: {
-    region: process.env.AWS_REGION || 'ap-southeast-1',
+    region: process.env.AWS_REGION || '',
     apiKey: process.env.AMAZON_LOCATION_API_KEY || '',
     authMode: process.env.AMAZON_LOCATION_AUTH_MODE || 'api-key',
     mapStyle: process.env.AMAZON_LOCATION_MAP_STYLE || 'Standard',

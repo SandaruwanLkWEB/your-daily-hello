@@ -9,7 +9,7 @@ const CONFIG: Record<ReportReadiness, { label: string; icon: typeof CheckCircle;
   'awaiting-assignment': { label: 'Awaiting TA Assignment', icon: Loader2, className: 'bg-muted text-muted-foreground border-border' },
   'awaiting-hr-approval': { label: 'Awaiting HR Approval', icon: ShieldAlert, className: 'bg-primary/10 text-primary border-primary/30' },
   archived: { label: 'Archived (Read-Only)', icon: Archive, className: 'bg-secondary text-secondary-foreground border-border' },
-  unavailable: { label: 'No Data Available', icon: XCircle, className: 'bg-destructive/10 text-destructive border-destructive/30' },
+  unavailable: { label: 'Not Ready', icon: XCircle, className: 'bg-muted text-muted-foreground border-border' },
 };
 
 export default function ReportReadinessBadge({ readiness }: { readiness: ReportReadiness }) {

@@ -7,11 +7,14 @@ import { DailyRun } from '../daily-lock/daily-run.entity';
 import { Employee } from '../employees/employee.entity';
 import { Vehicle } from '../vehicles/vehicle.entity';
 import { Department } from '../departments/department.entity';
+import { Place } from '../places/place.entity';
+import { SystemSetting } from '../settings/settings.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
     GeneratedRouteGroup, GeneratedRouteGroupMember, RouteGroupRun,
-    TransportRequest, TransportRequestEmployee, DailyRun, Employee, Vehicle, Department,
+    TransportRequest, TransportRequestEmployee, DailyRun, Employee, Vehicle, Department, Place,
+    SystemSetting,
   ])],
   controllers: [ReportsController],
 })

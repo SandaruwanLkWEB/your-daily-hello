@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import {
   TransportRequest,
   TransportRequestEmployee,
@@ -13,6 +13,7 @@ import { Department } from '../departments/department.entity';
 import { Employee } from '../employees/employee.entity';
 import { User } from '../users/user.entity';
 import { Place } from '../places/place.entity';
+import { DailyRun, DailyRunStatus } from '../daily-lock/daily-run.entity';
 
 /* ─── Internal types ─── */
 
@@ -47,11 +48,12 @@ export class TransportRequestsService {
     @InjectRepository(Employee) private readonly empRepo: Repository<Employee>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Place) private readonly placeRepo: Repository<Place>,
+    @InjectRepository(DailyRun) private readonly dailyRunRepo: Repository<DailyRun>,
   ) {}
 
   /* ────────────────── List ────────────────── */
 
-  async findAll(query: ListQuery): Promise<PaginatedResult<TransportRequest>> {
+  async findAll(query: ListQuery): Promise<PaginatedResult<any>> {
     const {
       page = 1,
       limit = 20,
@@ -73,7 +75,29 @@ export class TransportRequestsService {
       take: limit,
     });
 
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+    // Batch-load employee counts for all requests in this page
+    const requestIds = items.map(r => r.id);
+    const empCounts = new Map<number, number>();
+    if (requestIds.length > 0) {
+      const counts = await this.reqEmpRepo
+        .createQueryBuilder('re')
+        .select('re.request_id', 'request_id')
+        .addSelect('COUNT(*)::int', 'count')
+        .where('re.request_id IN (:...ids)', { ids: requestIds })
+        .groupBy('re.request_id')
+        .getRawMany();
+      for (const c of counts) {
+        empCounts.set(Number(c.request_id), Number(c.count));
+      }
+    }
+
+    const enriched = items.map(r => ({
+      ...r,
+      department_name: r.department?.name || `Department ${r.department_id}`,
+      employee_count: empCounts.get(r.id) || 0,
+    }));
+
+    return { items: enriched, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   /* ────────────────── Single request with full details ────────────────── */
@@ -280,22 +304,28 @@ export class TransportRequestsService {
     const req = await this.transition(id, RequestStatus.TA_COMPLETED, RequestStatus.HR_APPROVED, userId);
     await this.reqRepo.update(id, { hr_approved_by: userId, hr_approved_at: new Date() });
     await this.logApproval(id, 'HR_APPROVE', userId);
-    return req;
+    await this.syncDailyRunStatusForDate(req.request_date);
+    return this.findOneOrFail(id);
   }
 
   async hrReject(id: number, userId: number, reason?: string): Promise<TransportRequest> {
     const req = await this.transition(id, RequestStatus.TA_COMPLETED, RequestStatus.HR_REJECTED, userId, reason);
     await this.reqRepo.update(id, { rejection_reason: reason || undefined });
     await this.logApproval(id, 'HR_REJECT', userId, reason);
-    return req;
+    await this.syncDailyRunStatusForDate(req.request_date);
+    return this.findOneOrFail(id);
   }
 
   async dispatch(id: number, userId: number): Promise<TransportRequest> {
-    return this.transition(id, RequestStatus.HR_APPROVED, RequestStatus.DISPATCHED, userId);
+    const req = await this.transition(id, RequestStatus.HR_APPROVED, RequestStatus.DISPATCHED, userId);
+    await this.syncDailyRunStatusForDate(req.request_date);
+    return req;
   }
 
   async close(id: number, userId: number): Promise<TransportRequest> {
-    return this.transition(id, RequestStatus.DISPATCHED, RequestStatus.CLOSED, userId);
+    const req = await this.transition(id, RequestStatus.DISPATCHED, RequestStatus.CLOSED, userId);
+    await this.syncDailyRunStatusForDate(req.request_date);
+    return req;
   }
 
   async cancel(id: number, userId: number, reason?: string): Promise<TransportRequest> {
@@ -355,5 +385,45 @@ export class TransportRequestsService {
         reason,
       }),
     );
+  }
+
+  private async syncDailyRunStatusForDate(requestDate: Date | string): Promise<void> {
+    if (!requestDate) return;
+
+    const dailyRun = await this.dailyRunRepo.findOne({ where: { run_date: requestDate as any } });
+    if (!dailyRun) return;
+
+    const includedRequestIds = Array.isArray(dailyRun.included_request_ids)
+      ? dailyRun.included_request_ids.filter((id): id is number => Number.isFinite(Number(id)))
+      : [];
+
+    const requests = includedRequestIds.length > 0
+      ? await this.reqRepo.find({ where: { id: In(includedRequestIds) } })
+      : await this.reqRepo.find({
+          where: { request_date: requestDate as any },
+          order: { id: 'ASC' },
+        });
+
+    if (requests.length === 0) return;
+
+    const statuses = requests.map((req) => req.status);
+    let nextStatus: DailyRunStatus | null = null;
+
+    if (statuses.every((status) => status === RequestStatus.CLOSED)) {
+      nextStatus = DailyRunStatus.CLOSED;
+    } else if (statuses.every((status) => [RequestStatus.DISPATCHED, RequestStatus.CLOSED].includes(status))) {
+      nextStatus = DailyRunStatus.DISPATCHED;
+    } else if (statuses.every((status) => [RequestStatus.HR_APPROVED, RequestStatus.DISPATCHED, RequestStatus.CLOSED].includes(status))) {
+      nextStatus = DailyRunStatus.READY;
+    } else if (statuses.some((status) => status === RequestStatus.HR_REJECTED)) {
+      nextStatus = DailyRunStatus.SUBMITTED_TO_HR;
+    } else if (statuses.every((status) => [RequestStatus.TA_COMPLETED, RequestStatus.HR_APPROVED, RequestStatus.HR_REJECTED].includes(status))) {
+      nextStatus = DailyRunStatus.SUBMITTED_TO_HR;
+    }
+
+    if (nextStatus && dailyRun.status !== nextStatus) {
+      await this.dailyRunRepo.update(dailyRun.id, { status: nextStatus });
+      this.logger.log(`DailyRun #${dailyRun.id} (${String(requestDate)}) status synced to ${nextStatus}`);
+    }
   }
 }

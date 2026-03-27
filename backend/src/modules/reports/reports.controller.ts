@@ -2,7 +2,7 @@ import { Controller, Get, Query, Param, UseGuards, ParseIntPipe } from '@nestjs/
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, IsNull, In } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import {
   GeneratedRouteGroup, GeneratedRouteGroupMember, RouteGroupRun,
 } from '../grouping/grouping.entity';
@@ -11,6 +11,8 @@ import { DailyRun } from '../daily-lock/daily-run.entity';
 import { Employee } from '../employees/employee.entity';
 import { Vehicle } from '../vehicles/vehicle.entity';
 import { Department } from '../departments/department.entity';
+import { Place } from '../places/place.entity';
+import { SystemSetting } from '../settings/settings.entity';
 import { Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards';
 import { AppRole } from '../../common/enums';
@@ -38,6 +40,8 @@ export class ReportsController {
     @InjectRepository(Employee) private empRepo: Repository<Employee>,
     @InjectRepository(Vehicle) private vehicleRepo: Repository<Vehicle>,
     @InjectRepository(Department) private deptRepo: Repository<Department>,
+    @InjectRepository(Place) private placeRepo: Repository<Place>,
+    @InjectRepository(SystemSetting) private settingsRepo: Repository<SystemSetting>,
   ) {}
 
   // ── Helper: resolve latest run + groups from date ──
@@ -106,14 +110,37 @@ export class ReportsController {
   private buildMeta(run: RouteGroupRun | null, dailyRun: DailyRun | null, date?: string) {
     const status = dailyRun?.status || 'UNKNOWN';
     let readiness: string;
+    let blockedMessage: string | null = null;
+
     switch (status) {
-      case 'READY': case 'DISPATCHED': readiness = 'ready'; break;
-      case 'CLOSED': readiness = 'archived'; break;
-      case 'ASSIGNING': readiness = 'awaiting-hr-approval'; break;
-      case 'GROUPED': readiness = 'preview'; break;
-      case 'LOCKED': readiness = 'awaiting-grouping'; break;
-      default: readiness = 'unavailable';
+      case 'READY':
+      case 'DISPATCHED':
+        readiness = 'ready';
+        break;
+      case 'CLOSED':
+        readiness = 'archived';
+        break;
+      case 'SUBMITTED_TO_HR':
+        readiness = 'awaiting-hr-approval';
+        blockedMessage = 'Reports become available only after HR final approval.';
+        break;
+      case 'ASSIGNING':
+      case 'GROUPED':
+        readiness = 'awaiting-assignment';
+        blockedMessage = 'Reports become available only after TA assignment is complete and HR final approval is done.';
+        break;
+      case 'LOCKED':
+      case 'OPEN':
+        readiness = 'awaiting-grouping';
+        blockedMessage = 'Reports become available only after daily grouping, assignment, and HR final approval.';
+        break;
+      default:
+        readiness = 'unavailable';
+        blockedMessage = 'No daily run data is available for the selected date.';
+        break;
     }
+
+    const canViewFullReport = ['READY', 'DISPATCHED', 'CLOSED'].includes(status);
 
     return {
       title: '',
@@ -121,10 +148,27 @@ export class ReportsController {
       requestDate: date || '',
       workflowStatus: status,
       readiness,
+      canViewFullReport,
+      blockedMessage,
       routingSource: run?.routing_source || 'UNKNOWN',
       totalGroups: run?.total_groups || 0,
       totalEmployees: run?.total_employees || 0,
       unresolvedCount: run?.unresolved_count || 0,
+    };
+  }
+
+  private reportsAllowed(dailyRun: DailyRun | null): boolean {
+    return !!dailyRun && ['READY', 'DISPATCHED', 'CLOSED'].includes(dailyRun.status);
+  }
+
+  private blockReport(meta: any, message?: string) {
+    return {
+      rows: [],
+      meta: {
+        ...meta,
+        canViewFullReport: false,
+        blockedMessage: message || meta?.blockedMessage || 'Reports become available only after HR final approval.',
+      },
     };
   }
 
@@ -151,11 +195,20 @@ export class ReportsController {
     }
   }
 
+  // ── Batch-load places by IDs ──
+  private async batchLoadPlaces(placeIds: number[]): Promise<Map<number, Place>> {
+    const unique = [...new Set(placeIds.filter(Boolean))];
+    if (unique.length === 0) return new Map();
+    const places = await this.placeRepo.findByIds(unique);
+    return new Map(places.map(p => [p.id, p]));
+  }
+
   // ── Route-Wise (batch-optimized) ──
 
   private async routeWise(date?: string) {
     const { run, dailyRun, groups } = await this.resolveRunFromDate(date);
     const meta = this.buildMeta(run, dailyRun, date);
+    if (!this.reportsAllowed(dailyRun)) return this.blockReport(meta);
     if (groups.length === 0) return { rows: [], meta };
 
     // Batch loads
@@ -166,6 +219,18 @@ export class ReportsController {
     const vehicleIds = groups.map(g => g.assigned_vehicle_id).filter(Boolean) as number[];
     const vehicleMap = await this.batchLoadVehicles(vehicleIds);
 
+    // Batch-load places from member place_ids and employee place_ids
+    const allPlaceIds: number[] = [];
+    for (const members of membersMap.values()) {
+      for (const m of members) {
+        if (m.place_id) allPlaceIds.push(m.place_id);
+      }
+    }
+    for (const emp of empMap.values()) {
+      if (emp.place_id) allPlaceIds.push(emp.place_id);
+    }
+    const placeMap = await this.batchLoadPlaces(allPlaceIds);
+
     const rows: any[] = [];
     for (const g of groups) {
       const members = membersMap.get(g.id) || [];
@@ -174,25 +239,58 @@ export class ReportsController {
       const driverName = v?.driver_name || '';
       const driverPhone = v?.driver_phone || '';
 
+      // Resolve place names for all members in this group (for stops list + route name)
+      const groupStops: string[] = [];
+      const memberRows: any[] = [];
+      // Bug fix #6: Deduplicate members by stable key (member id, fallback employee_id+sequence)
+      const seenKeys = new Set<string>();
+
       for (const m of members) {
+        const dedupKey = `${m.employee_id}-${m.pickup_sequence}`;
+        if (seenKeys.has(dedupKey)) continue;
+        seenKeys.add(dedupKey);
+
         const emp = empMap.get(m.employee_id);
-        rows.push({
+        // Bug fix #7: Resolve destination — prefer place name, fallback "Unnamed Drop Point"
+        let destinationName = 'Unnamed Drop Point';
+        if (m.place_id && placeMap.has(m.place_id)) {
+          destinationName = placeMap.get(m.place_id)!.title;
+        } else if (emp?.place_id && placeMap.has(emp.place_id)) {
+          destinationName = placeMap.get(emp.place_id)!.title;
+        }
+
+        if (!groupStops.includes(destinationName) && destinationName !== 'Unnamed Drop Point') {
+          groupStops.push(destinationName);
+        }
+
+        memberRows.push({
           requestDate: date || '',
           requestCode: g.group_code,
-          routeName: g.corridor_label || `Corridor ${g.corridor_code || '?'}`,
           groupCode: g.group_code,
+          employeeNo: emp?.emp_no || '',
           employeeName: emp?.full_name || `Employee #${m.employee_id}`,
-          destination: `${Number(m.lat_snapshot).toFixed(4)}, ${Number(m.lng_snapshot).toFixed(4)}`,
+          destination: destinationName,
           vehicleReg,
           driverName,
           driverPhone,
           status: g.status,
-          distanceKm: Number(g.estimated_distance_km || 0),
-          durationSeconds: g.estimated_duration_seconds || 0,
-          routingSource: g.routing_source || run?.routing_source || 'UNKNOWN',
-          depotDistanceKm: Number(m.depot_distance_km || 0),
+          stopSequence: m.pickup_sequence,
         });
       }
+
+      // Build human-readable route name: "DSI to <farthest destination>"
+      const farthestStop = groupStops.length > 0
+        ? groupStops[groupStops.length - 1]
+        : (g.corridor_label || 'Unknown Area');
+      const routeName = `DSI to ${farthestStop}`;
+
+      // Attach routeName and stops to each row
+      for (const row of memberRows) {
+        row.routeName = routeName;
+        row.stops = groupStops;
+      }
+
+      rows.push(...memberRows);
     }
 
     return { rows, meta };
@@ -203,6 +301,7 @@ export class ReportsController {
   private async vehicleWise(date?: string) {
     const { run, dailyRun, groups } = await this.resolveRunFromDate(date);
     const meta = this.buildMeta(run, dailyRun, date);
+    if (!this.reportsAllowed(dailyRun)) return this.blockReport(meta);
     if (groups.length === 0) return { rows: [], meta };
 
     const assignedGroups = groups.filter(g => g.assigned_vehicle_id);
@@ -214,7 +313,7 @@ export class ReportsController {
     const vehicleMap = await this.batchLoadVehicles(vehicleIds);
 
     // Group by vehicle
-    const byVehicle = new Map<number, { vehicle: Vehicle; groups: GeneratedRouteGroup[]; employees: string[] }>();
+    const byVehicle = new Map<number, { vehicle: Vehicle; groups: GeneratedRouteGroup[]; employees: Array<{ empNo: string; name: string }> }>();
     for (const g of assignedGroups) {
       const vid = g.assigned_vehicle_id!;
       if (!byVehicle.has(vid)) {
@@ -225,7 +324,15 @@ export class ReportsController {
       if (!entry) continue;
       entry.groups.push(g);
       const members = membersMap.get(g.id) || [];
-      entry.employees.push(...members.map(m => empMap.get(m.employee_id)?.full_name || `Employee #${m.employee_id}`));
+      // Bug fix #6: Deduplicate members per vehicle
+      const seenEmpIds = new Set(entry.employees.map(e => e.empNo));
+      for (const m of members) {
+        const emp = empMap.get(m.employee_id);
+        const empNo = emp?.emp_no || '';
+        if (empNo && seenEmpIds.has(empNo)) continue;
+        if (empNo) seenEmpIds.add(empNo);
+        entry.employees.push({ empNo, name: emp?.full_name || `Employee #${m.employee_id}` });
+      }
     }
 
     const rows = Array.from(byVehicle.values()).map(({ vehicle, groups: vGroups, employees }) => ({
@@ -251,6 +358,7 @@ export class ReportsController {
   private async departmentSummary(date?: string) {
     const { run, dailyRun, groups } = await this.resolveRunFromDate(date);
     const meta = this.buildMeta(run, dailyRun, date);
+    if (!this.reportsAllowed(dailyRun)) return this.blockReport(meta);
 
     const requests = date
       ? await this.reqRepo.find({ where: { request_date: date as any }, relations: ['department'] })
@@ -332,6 +440,7 @@ export class ReportsController {
   private async groupingSummary(date?: string) {
     const { run, dailyRun, groups } = await this.resolveRunFromDate(date);
     const meta = this.buildMeta(run, dailyRun, date);
+    if (!this.reportsAllowed(dailyRun)) return this.blockReport(meta);
     if (groups.length === 0) return { rows: [], meta };
 
     // Batch-load vehicles
@@ -368,6 +477,7 @@ export class ReportsController {
   private async dispatchManifest(date?: string) {
     const { run, dailyRun, groups } = await this.resolveRunFromDate(date);
     const meta = this.buildMeta(run, dailyRun, date);
+    if (!this.reportsAllowed(dailyRun)) return this.blockReport(meta);
 
     const assignedGroups = groups.filter(g => g.assigned_vehicle_id);
     if (assignedGroups.length === 0) return { rows: [], meta };
@@ -379,6 +489,14 @@ export class ReportsController {
     const vehicleIds = assignedGroups.map(g => g.assigned_vehicle_id!);
     const vehicleMap = await this.batchLoadVehicles(vehicleIds);
 
+    // Batch-load places for dispatch manifest destination resolution
+    const allPlaceIds: number[] = [];
+    for (const members of membersMap.values()) {
+      for (const m of members) { if (m.place_id) allPlaceIds.push(m.place_id); }
+    }
+    for (const emp of empMap.values()) { if (emp.place_id) allPlaceIds.push(emp.place_id); }
+    const placeMap = await this.batchLoadPlaces(allPlaceIds);
+
     const rows = assignedGroups.map(g => {
       const members = membersMap.get(g.id) || [];
       const v = vehicleMap.get(g.assigned_vehicle_id!);
@@ -388,11 +506,28 @@ export class ReportsController {
         vehicleReg: v?.registration_no || '',
         driverName: v?.driver_name || '',
         driverPhone: v?.driver_phone || '',
-        employees: members.map(m => ({
-          name: empMap.get(m.employee_id)?.full_name || `Employee #${m.employee_id}`,
-          destination: `${Number(m.lat_snapshot).toFixed(4)}, ${Number(m.lng_snapshot).toFixed(4)}`,
-          sequence: m.pickup_sequence,
-        })),
+        employees: (() => {
+          // Bug fix #6: Deduplicate dispatch members
+          const seenKeys = new Set<string>();
+          return members.filter(m => {
+            const key = `${m.employee_id}-${m.pickup_sequence}`;
+            if (seenKeys.has(key)) return false;
+            seenKeys.add(key);
+            return true;
+          }).map(m => {
+            const emp = empMap.get(m.employee_id);
+            // Bug fix #7: Resolve place name, fallback "Unnamed Drop Point"
+            let dest = 'Unnamed Drop Point';
+            if (m.place_id && placeMap.has(m.place_id)) dest = placeMap.get(m.place_id)!.title;
+            else if (emp?.place_id && placeMap.has(emp.place_id)) dest = placeMap.get(emp.place_id)!.title;
+            return {
+              empNo: emp?.emp_no || '',
+              name: emp?.full_name || `Employee #${m.employee_id}`,
+              destination: dest,
+              sequence: m.pickup_sequence,
+            };
+          });
+        })(),
         notes: g.cluster_note || '',
         estimatedDistanceKm: Number(g.estimated_distance_km || 0),
         estimatedDurationSeconds: g.estimated_duration_seconds || 0,
@@ -408,17 +543,30 @@ export class ReportsController {
   private async costSummary(date?: string) {
     const { run, dailyRun, groups } = await this.resolveRunFromDate(date);
     const meta = this.buildMeta(run, dailyRun, date);
+    if (!this.reportsAllowed(dailyRun)) return this.blockReport(meta);
 
-    const rows = groups.map(g => ({
-      routeGroup: g.group_code,
-      estimatedDistanceKm: Number(g.estimated_distance_km || 0),
-      estimatedCost: Number(g.estimated_distance_km || 0) * 50, // placeholder cost/km
-      vehicleCost: 0,
-      costPerEmployee: g.employee_count > 0 ? (Number(g.estimated_distance_km || 0) * 50) / g.employee_count : 0,
-      departmentTotal: 0,
-      employeeCount: g.employee_count,
-      routingSource: g.routing_source || 'UNKNOWN',
-    }));
+    // Load cost_per_km from system settings (default 50 LKR)
+    let costPerKm = 50;
+    try {
+      const setting = await this.settingsRepo.findOne({ where: { key: 'cost_per_km' } });
+      if (setting?.value) costPerKm = Number(setting.value) || 50;
+    } catch {}
+
+    const rows = groups.map(g => {
+      const distKm = Number(g.estimated_distance_km || 0);
+      const routeCost = distKm * costPerKm;
+      return {
+        routeGroup: g.group_code,
+        estimatedDistanceKm: distKm,
+        estimatedCost: routeCost,
+        vehicleCost: routeCost,
+        costPerEmployee: g.employee_count > 0 ? routeCost / g.employee_count : 0,
+        departmentTotal: routeCost,
+        employeeCount: g.employee_count,
+        costPerKm,
+        routingSource: g.routing_source || 'UNKNOWN',
+      };
+    });
 
     return { rows, meta };
   }
@@ -428,6 +576,7 @@ export class ReportsController {
   private async exceptionReport(date?: string) {
     const { run, dailyRun, groups } = await this.resolveRunFromDate(date);
     const meta = this.buildMeta(run, dailyRun, date);
+    if (!this.reportsAllowed(dailyRun)) return this.blockReport(meta);
 
     const rows: any[] = [];
 
@@ -467,10 +616,17 @@ export class ReportsController {
   // ── Archive (batch-optimized) ──
 
   private async archiveReport() {
-    const meta = this.buildMeta(null, null);
+    const meta = { ...this.buildMeta(null, null), canViewFullReport: true, blockedMessage: null };
     const runs = await this.runRepo.find({ order: { created_at: 'DESC' }, take: 50 });
 
     if (runs.length === 0) return { rows: [], meta };
+
+    // Batch-load daily runs for all runs that have daily_run_id
+    const dailyRunIds = [...new Set(runs.map(r => r.daily_run_id).filter(Boolean))] as number[];
+    const dailyRuns = dailyRunIds.length > 0
+      ? await this.dailyRunRepo.find({ where: { id: In(dailyRunIds) } })
+      : [];
+    const dailyRunMap = new Map(dailyRuns.map(dr => [dr.id, dr]));
 
     // Batch-load all groups for all runs
     const runIds = runs.map(r => r.id);
@@ -489,15 +645,24 @@ export class ReportsController {
         runGroups.filter(g => g.assigned_vehicle_id).map(g => g.assigned_vehicle_id),
       ).size;
 
+      // Use daily run date if available, else extract from parameters, else fall back to created_at
+      const dailyRun = r.daily_run_id ? dailyRunMap.get(r.daily_run_id) : null;
+      const dailyRunDate = dailyRun?.run_date;
+      const paramDate = (r.parameters as any)?.date;
+      const requestDate = dailyRunDate
+        ? (typeof dailyRunDate === 'string' ? dailyRunDate : (dailyRunDate as any)?.toISOString?.()?.split('T')[0])
+        : paramDate || r.created_at?.toISOString?.()?.split('T')[0] || '';
+      const dailyRunStatus = dailyRun?.status || 'ARCHIVED';
+
       return {
         requestCode: `RUN-${r.id}`,
-        requestDate: r.created_at?.toISOString?.()?.split('T')[0] || '',
-        closedDate: '',
-        departmentName: '',
+        requestDate: requestDate || '',
+        closedDate: dailyRunStatus === 'CLOSED' && dailyRun ? (dailyRun as any).updated_at?.toISOString?.()?.split('T')[0] || '' : '',
+        departmentName: dailyRun ? `${(r.parameters as any)?.departmentCount || '?'} departments` : '',
         totalEmployees: r.total_employees || 0,
         totalGroups: r.total_groups || 0,
         totalVehicles,
-        finalStatus: 'ARCHIVED',
+        finalStatus: dailyRunStatus,
         routingSource: r.routing_source || 'UNKNOWN',
       };
     });

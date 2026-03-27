@@ -28,12 +28,15 @@ export interface RouteWiseRow {
   requestDate: string;
   routeName: string;
   groupCode: string;
+  employeeNo?: string;
   employeeName: string;
   destination: string;
   vehicleReg: string;
   driverName: string;
   driverPhone: string;
   status: string;
+  stopSequence?: number;
+  stops?: string[];
 }
 
 export interface VehicleWiseRow {
@@ -42,7 +45,7 @@ export interface VehicleWiseRow {
   driverName: string;
   driverPhone: string;
   groupCodes: string[];
-  employees: string[];
+  employees: { empNo?: string; name: string }[];
   capacity: number;
   occupancy: number;
   overflow: boolean;
@@ -77,7 +80,7 @@ export interface DispatchManifestRow {
   vehicleReg: string;
   driverName: string;
   driverPhone: string;
-  employees: { name: string; destination: string; sequence: number }[];
+  employees: { empNo?: string; name: string; destination: string; sequence: number }[];
   notes: string;
 }
 
@@ -95,6 +98,7 @@ export interface ExceptionRow {
   type: 'unresolved-location' | 'overflow' | 'unassigned' | 'warning' | 'rejected';
   description: string;
   groupCode?: string;
+  employeeNo?: string;
   employeeName?: string;
   severity: 'high' | 'medium' | 'low';
   requestCode: string;
@@ -121,4 +125,6 @@ export interface ReportMeta {
   vehicle?: string;
   workflowStatus: string;
   readiness: ReportReadiness;
+  canViewFullReport?: boolean;
+  blockedMessage?: string | null;
 }

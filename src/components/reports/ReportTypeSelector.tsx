@@ -16,12 +16,16 @@ const TYPES: { id: ReportType; label: string; desc: string; icon: typeof Route }
 interface Props {
   selected: ReportType;
   onChange: (t: ReportType) => void;
+  allowedTypes?: ReportType[];
 }
 
-export default function ReportTypeSelector({ selected, onChange }: Props) {
+export default function ReportTypeSelector({ selected, onChange, allowedTypes }: Props) {
+  // Bug fix #2: Only show cards the user is allowed to access
+  const visibleTypes = allowedTypes ? TYPES.filter(t => allowedTypes.includes(t.id)) : TYPES;
+
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-      {TYPES.map(t => {
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+      {visibleTypes.map(t => {
         const active = selected === t.id;
         return (
           <Card
